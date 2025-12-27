@@ -1,0 +1,15 @@
+// Initial prompt to generate initial version of code
+Generate a program to analyze financial statements to get total expenses of a trip, including transportation, hotels/resorts, flights, etc. Here are the requirements:
+
+I'd like to get this analysis with a local AI such as Ollama since it may involve sensitive information. Therefore use Ollama APIs, assume a local model is already available.
+
+Inputs to the program are:
+a) start and date of the actual trip, location of the trip, accommodation (hotel, resort, cruise, etc.).
+b) multiple csv files representing various financial statements like bank statements and credit card statements.
+
+Outputs expected from the program:
+a) List transactions grouped by broad category (accommodation, transport - uber/taxi/air travel, meals, tours, groceries at the location, etc.)
+b) Sum total expenditure of each category
+c) Sum total expenditure across all categories, i.e. sum total expenditure of the trip
+
+The financial statements may be broader than just the date range of the trip, even by multiple months, to make sure that booking fees that are done in advance (resorts/hotels/flights/etc.) are not missed out. So the program has to be smart about it and not just examine dates of the trip, but upto a few months before for all advance bookings.
