@@ -30,7 +30,7 @@ def analyze_trip_expenses(start_date, end_date, location, accommodation, csv_fil
 
         for index, row in df.iterrows():
             transaction_date = row['date']
-            description = row['description']
+            description = row['description'] if row['description'] is not None else row['Name']
             amount = row['amount']
 
             # Filter transactions within the trip dates or for advance bookings
@@ -74,11 +74,11 @@ def categorize_expense(description, location):
 
 # Example invocation
 if __name__ == "__main__":
-    start_date = "2025-12-20"
-    end_date = "2025-12-27"
-    location = "New York"
-    accommodation = "Hotel"
-    csv_files = ["C:\\data\\bank_statement.csv", "C:\\data\\credit_card_statement.csv"]
+    start_date = "2025-12-17"
+    end_date = "2025-12-23"
+    location = "Cozumel, Mexico"
+    accommodation = "Resort and Hotel"
+    csv_files = ["financial_statement1.csv", "financial_statement2.csv"]
 
     categorized_expenses, total_expenditure = analyze_trip_expenses(start_date, end_date, location, accommodation, csv_files)
 
