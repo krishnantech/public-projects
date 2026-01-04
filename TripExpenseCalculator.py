@@ -6,7 +6,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 
-def analyze_trip_expenses(start_date, end_date, location, csv_files):
+def analyze_trip_expenses(start_date, end_date, location, csv_files, output_file_name):
     """
     Analyzes trip expenses from financial statements using a local AI model.
 
@@ -73,8 +73,8 @@ def analyze_trip_expenses(start_date, end_date, location, csv_files):
                 # Ignore transactions outside the trip date range and advance booking window
                 continue
     
-            # ignore subscriptions and recurring payments
-            if (category not in ["Subscriptions", "Recurring Payments"]):
+            # ignore subscriptions, recurring/credit card payments
+            if (category not in ["Subscriptions", "Recurring Payments", "Credit Card Payments"]):
                 log_transaction(transaction_date_parsed, description, amount, category, status="Accepted")
                 all_expenses.append({'date': transaction_date, 'description': description, 'amount': amount, 'category': category})
             #else:
@@ -96,7 +96,7 @@ def analyze_trip_expenses(start_date, end_date, location, csv_files):
     # Calculate total trip expenditure
     total_expenditure = sum(categorized_expenses.values())
 
-    write_expenses_to_excel(all_expenses, categorized_expenses, total_expenditure, "trip_expenses.xlsx")
+    write_expenses_to_excel(all_expenses, categorized_expenses, total_expenditure, f"{output_file_name}.xlsx")
 
     return categorized_expenses, total_expenditure
 
@@ -108,7 +108,7 @@ def categorize_expense(description, location, amount):
     messages = [
         {
             'role': 'user',
-            'content': f"Categorize the following expense description: '{description}' for a trip to {location}, for an amount of {amount}. Possible categories are: Accommodation, Transport, Meals, Tours, Groceries, Airfare, Subscriptions, Recurring Payments, Other. Pay special attention to the description, if you find full or partial names of airline companies and expenses are on the higher side (say double digits to hundreds of dollars), then it is likely Airfare. Print only the category and nothing else.",
+            'content': f"Categorize the following expense description: '{description}' for a trip to {location}, for an amount of {amount}. Possible categories are: Accommodation, Transport, Meals, Tours, Groceries, Airfare, Subscriptions, Recurring Payments, Credit Card Payments, Other. Pay special attention to the description, if you find full or partial names of airline companies and expenses are on the higher side (say double digits to hundreds of dollars), then it is likely Airfare. Print only the category and nothing else.",
         },
     ]
     response = chat('gemma3:12b', messages=messages)
@@ -294,12 +294,13 @@ def write_expenses_to_excel(all_expenses, categorized_expenses, total_expenditur
 
 # Example invocation
 if __name__ == "__main__":
-    start_date = "2025-12-16"
-    end_date = "2025-12-23"
-    location = "Cozumel, Mexico"
-    csv_files = ["C:\\mine\\TripExpenseData\\FirstTechExportedTransactions.csv", "C:\\mine\\TripExpenseData\\Chase Credit Card.CSV", "C:\\mine\\TripExpenseData\\Fidelity Credit Card.CSV"]
 
-    categorized_expenses, total_expenditure = analyze_trip_expenses(start_date, end_date, location, csv_files)
+    start_date = "2024-12-01"
+    end_date = "2024-12-10"
+    location = "Mexico"
+    csv_files = ["C:\\data\\statement_transactions1.csv","C:\\data\\statement_transactions2.csv"]
+
+    categorized_expenses, total_expenditure = analyze_trip_expenses(start_date, end_date, location, csv_files, output_file_name="Mexico_Trip_2024_Expenses")
 
     print("Categorized Expenses:")
     print(categorized_expenses)
