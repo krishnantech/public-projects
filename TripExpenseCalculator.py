@@ -6,7 +6,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 
-def analyze_trip_expenses(start_date, end_date, location, accommodation, csv_files):
+def analyze_trip_expenses(start_date, end_date, location, csv_files):
     """
     Analyzes trip expenses from financial statements using a local AI model.
 
@@ -14,7 +14,6 @@ def analyze_trip_expenses(start_date, end_date, location, accommodation, csv_fil
         start_date (str): Start date of the trip (YYYY-MM-DD).
         end_date (str): End date of the trip (YYYY-MM-DD).
         location (str): Location of the trip.
-        accommodation (str): Type of accommodation (hotel, resort, cruise, etc.).
         csv_files (list): List of paths to CSV files containing financial statements.
 
     Returns:
@@ -43,7 +42,6 @@ def analyze_trip_expenses(start_date, end_date, location, accommodation, csv_fil
 
         print(f"Relevant columns from CSV detected. Using columns {date_column} for Date, {description_column} for Description, {amount_column} for Amount")
 
-        # Assuming CSV has columns: 'date', 'description', 'amount'
         df['date'] = pd.to_datetime(df[date_column])
 
         for index, row in df.iterrows():
@@ -55,16 +53,21 @@ def analyze_trip_expenses(start_date, end_date, location, accommodation, csv_fil
 
             # Filter transactions within the trip dates or for advance bookings
             if transaction_date_parsed >= start_date and transaction_date_parsed <= end_date:
-                # Categorize expenses
                 category = categorize_expense(description, location, amount)
 
             elif transaction_date_parsed >= (start_date - timedelta(days=advance_booking_months * 30)) and transaction_date_parsed <= (start_date - timedelta(days=1)):
                 # Categorize expenses for advance bookings. We will look for specific types here (airfare, accommodation)
                 category = categorize_expense(description, location, amount)
 
-                if(category not in ["Airfare", "Accommodation"]):
+                if(category not in ("Airfare", "Accommodation")):
                     #log_transaction(transaction_date_parsed, description, amount, category, status="Ignored", sub_status="Older irrelevant transaction")
                     continue  
+
+            elif transaction_date_parsed == (end_date + timedelta(days=1)):
+                # Include transactions made the day after the trip ends (e.g., hotel check-out charges)
+                category = categorize_expense(description, location, amount)
+                if(category not in ("Accommodation", "Other", "Transport")):
+                    continue
 
             else:
                 # Ignore transactions outside the trip date range and advance booking window
@@ -294,10 +297,9 @@ if __name__ == "__main__":
     start_date = "2025-12-16"
     end_date = "2025-12-23"
     location = "Cozumel, Mexico"
-    accommodation = "Resort and Hotel"
     csv_files = ["C:\\mine\\TripExpenseData\\FirstTechExportedTransactions.csv", "C:\\mine\\TripExpenseData\\Chase Credit Card.CSV", "C:\\mine\\TripExpenseData\\Fidelity Credit Card.CSV"]
 
-    categorized_expenses, total_expenditure = analyze_trip_expenses(start_date, end_date, location, accommodation, csv_files)
+    categorized_expenses, total_expenditure = analyze_trip_expenses(start_date, end_date, location, csv_files)
 
     print("Categorized Expenses:")
     print(categorized_expenses)
