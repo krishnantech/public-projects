@@ -1,7 +1,7 @@
 from ollama import chat
 import pandas as pd
 from datetime import datetime, timedelta
-from dateutil import parser
+import dateutil.parser as date_parser
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
@@ -47,25 +47,25 @@ def analyze_trip_expenses(start_date, end_date, location, csv_files, output_file
         for index, row in df.iterrows():
             transaction_date = row[date_column]
             description = row[description_column]
-            amount = abs(row[amount_column]) 
-            transaction_date_parsed = parser.parse(transaction_date) 
+            amount = row[amount_column] 
+            transaction_date_parsed = date_parser.parse(transaction_date) 
             category = "Other"
 
             # Filter transactions within the trip dates or for advance bookings
             if transaction_date_parsed >= start_date and transaction_date_parsed <= end_date:
-                category = categorize_expense(description, location, amount)
+                category = categorize_expense(description, amount)
 
             elif transaction_date_parsed >= (start_date - timedelta(days=advance_booking_months * 30)) and transaction_date_parsed <= (start_date - timedelta(days=1)):
                 # Categorize expenses for advance bookings. We will look for specific types here (airfare, accommodation)
-                category = categorize_expense(description, location, amount)
+                category = categorize_expense(description, amount)
 
                 if(category not in ("Airfare", "Accommodation")):
-                    #log_transaction(transaction_date_parsed, description, amount, category, status="Ignored", sub_status="Older irrelevant transaction")
+                    log_transaction(transaction_date_parsed, description, amount, category, status="Ignored", sub_status="Older irrelevant transaction")
                     continue  
 
             elif transaction_date_parsed == (end_date + timedelta(days=1)):
                 # Include transactions made the day after the trip ends (e.g., hotel check-out charges)
-                category = categorize_expense(description, location, amount)
+                category = categorize_expense(description, amount)
                 if(category not in ("Accommodation", "Other", "Transport")):
                     continue
 
@@ -74,11 +74,11 @@ def analyze_trip_expenses(start_date, end_date, location, csv_files, output_file
                 continue
     
             # ignore subscriptions, recurring/credit card payments
-            if (category not in ["Subscriptions", "Recurring Payments", "Credit Card Payments"]):
+            if (category not in ["Subscriptions", "Recurring Payments", "Credit Card Payments", "Other Credits"]):
                 log_transaction(transaction_date_parsed, description, amount, category, status="Accepted")
-                all_expenses.append({'date': transaction_date, 'description': description, 'amount': amount, 'category': category})
-            #else:
-                #log_transaction(transaction_date_parsed, description, amount, category, status="Ignored", sub_status="Subscription/Recurring Payment")
+                all_expenses.append({'date': transaction_date, 'description': description, 'amount': abs(amount), 'category': category})
+            else:
+                log_transaction(transaction_date_parsed, description, amount, category, status="Ignored", sub_status="Subscription/Recurring Payment")
 
         print("")
 
@@ -100,17 +100,23 @@ def analyze_trip_expenses(start_date, end_date, location, csv_files, output_file
 
     return categorized_expenses, total_expenditure
 
-def categorize_expense(description, location, amount):
+def categorize_expense(description, amount):
     """
     Categorizes an expense based on its description and location.
     Uses Ollama to categorize expenses.
     """
     messages = [
         {
+            'role': 'system',
+            'content': f"You are a budgeting consultant. You are helping the user categorize financial transactions from bank statements or credit cards, into one of these categories: Accommodation, Transport, Meals, Groceries, Airfare, Subscriptions, Recurring Payments, Other. Negative amounts indicate payments, and positive amounts indicate refunds or credits. Print only the category of the transaction and nothing else. Pay special attention to the description, if you find full or partial names of airline companies and larger expense amounts (say double digits to hundreds of dollars), then it is likely Airfare.",
+        },
+        {
             'role': 'user',
-            'content': f"Categorize the following expense description: '{description}' for a trip to {location}, for an amount of {amount}. Possible categories are: Accommodation, Transport, Meals, Tours, Groceries, Airfare, Subscriptions, Recurring Payments, Credit Card Payments, Other. Pay special attention to the description, if you find full or partial names of airline companies and expenses are on the higher side (say double digits to hundreds of dollars), then it is likely Airfare. Print only the category and nothing else.",
+            'content': f"Description: '{description}', amount: {amount}",
         },
     ]
+
+
     response = chat('gemma3:12b', messages=messages)
     category = response['message']['content'].strip()
     return category
@@ -182,7 +188,7 @@ def print_expenses_by_category(all_expenses):
         expenses_in_category = sorted([expense for expense in all_expenses if expense['category'] == category], key=lambda x: x['date'])
         print(f"Category: {category}")
         for expense in expenses_in_category:
-            log_finalized_transaction(parser.parse(expense['date']), expense['description'], expense['amount'])
+            log_finalized_transaction(date_parser.parse(expense['date']), expense['description'], expense['amount'])
         print("-" * 20)
 
 
@@ -292,18 +298,56 @@ def write_expenses_to_excel(all_expenses, categorized_expenses, total_expenditur
     print(f"Expenses written to {output_file}")
 
 
-# Example invocation
+import argparse
 if __name__ == "__main__":
-
-    start_date = "2024-12-01"
-    end_date = "2024-12-10"
-    location = "Mexico"
-    csv_files = ["C:\\data\\statement_transactions1.csv","C:\\data\\statement_transactions2.csv"]
-
-    categorized_expenses, total_expenditure = analyze_trip_expenses(start_date, end_date, location, csv_files, output_file_name="Mexico_Trip_2024_Expenses")
-
+    parser = argparse.ArgumentParser(
+        description="Analyze trip expenses from financial statements using AI categorization.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python TripExpenseCalculator.py -s 2024-12-01 -e 2024-12-10 -l California -f statement1.csv,statement2.csv -o CaliforniaTrip2024
+  python TripExpenseCalculator.py --start-date 2024-12-01 --end-date 2024-12-10 --location California --files statement1.csv,statement2.csv --output-file CaliforniaTrip2024
+        """
+    )
+    
+    parser.add_argument(
+        '-s', '--start-date',
+        required=True,
+        help='Start date of the trip (YYYY-MM-DD)'
+    )
+    parser.add_argument(
+        '-e', '--end-date',
+        required=True,
+        help='End date of the trip (YYYY-MM-DD)'
+    )
+    parser.add_argument(
+        '-l', '--location',
+        required=True,
+        help='Location of the trip'
+    )
+    parser.add_argument(
+        '-f', '--files',
+        type=str,
+        required=True,
+        help='Paths to CSV files containing financial statements (comma-separated)'
+    )
+    parser.add_argument(
+        '-o', '--output-file',
+        required=True,
+        help='Output file name (without .xlsx extension)'
+    )
+    
+    args = parser.parse_args()
+    
+    csv_files = [f.strip() for f in args.files.split(',')]
+    categorized_expenses, total_expenditure = analyze_trip_expenses(
+        args.start_date,
+        args.end_date,
+        args.location,
+        csv_files,
+        args.output_file
+    )
+    
     print("Categorized Expenses:")
     print(categorized_expenses)
     print("\nTotal Expenditure:", total_expenditure)
-
-    
