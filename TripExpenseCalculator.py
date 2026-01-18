@@ -4,7 +4,10 @@ from datetime import datetime, timedelta
 import dateutil.parser as date_parser
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from OllamaGenAIService import OllamaGenAIService;
 
+# Create a default AI service instance
+_ai_service = OllamaGenAIService("gemma3:12b")
 
 def analyze_trip_expenses(start_date, end_date, location, csv_files, output_file_name):
     """
@@ -36,9 +39,9 @@ def analyze_trip_expenses(start_date, end_date, location, csv_files, output_file
         columnListFromCsv = df.columns.tolist()
         
         # Identify relevant date, description and amount columns
-        date_column = get_column_name(columnListFromCsv, "transaction date")
-        description_column = get_column_name(columnListFromCsv, "name of the merchant")
-        amount_column = get_column_name(columnListFromCsv, "transaction amount")
+        date_column = _ai_service.get_column_name(columnListFromCsv, "transaction date")
+        description_column = _ai_service.get_column_name(columnListFromCsv, "name of the merchant")
+        amount_column = _ai_service.get_column_name(columnListFromCsv, "transaction amount")
 
         print(f"Relevant columns from CSV detected. Using columns {date_column} for Date, {description_column} for Description, {amount_column} for Amount")
 
@@ -53,19 +56,18 @@ def analyze_trip_expenses(start_date, end_date, location, csv_files, output_file
 
             # Filter transactions within the trip dates or for advance bookings
             if transaction_date_parsed >= start_date and transaction_date_parsed <= end_date:
-                category = categorize_expense(description, amount)
+                category = _ai_service.categorize_expense(description, amount)
 
             elif transaction_date_parsed >= (start_date - timedelta(days=advance_booking_months * 30)) and transaction_date_parsed <= (start_date - timedelta(days=1)):
                 # Categorize expenses for advance bookings. We will look for specific types here (airfare, accommodation)
-                category = categorize_expense(description, amount)
-
+                category = _ai_service.categorize_expense(description, amount)
                 if(category not in ("Airfare", "Accommodation")):
                     log_transaction(transaction_date_parsed, description, amount, category, status="Ignored", sub_status="Older irrelevant transaction")
                     continue  
 
             elif transaction_date_parsed == (end_date + timedelta(days=1)):
                 # Include transactions made the day after the trip ends (e.g., hotel check-out charges)
-                category = categorize_expense(description, amount)
+                category = _ai_service.categorize_expense(description, amount)
                 if(category not in ("Accommodation", "Other", "Transport")):
                     continue
 
@@ -99,46 +101,6 @@ def analyze_trip_expenses(start_date, end_date, location, csv_files, output_file
     write_expenses_to_excel(all_expenses, categorized_expenses, total_expenditure, f"{output_file_name}.xlsx")
 
     return categorized_expenses, total_expenditure
-
-def categorize_expense(description, amount):
-    """
-    Categorizes an expense based on its description and location.
-    Uses Ollama to categorize expenses.
-    """
-    messages = [
-        {
-            'role': 'system',
-            'content': f"You are a budgeting consultant. You are helping the user categorize financial transactions from bank statements or credit cards, into one of these categories: Accommodation, Transport, Meals, Groceries, Airfare, Subscriptions, Recurring Payments, Other. Negative amounts indicate payments, and positive amounts indicate refunds or credits. Print only the category of the transaction and nothing else. Pay special attention to the description, if you find full or partial names of airline companies and larger expense amounts (say double digits to hundreds of dollars), then it is likely Airfare.",
-        },
-        {
-            'role': 'user',
-            'content': f"Description: '{description}', amount: {amount}",
-        },
-    ]
-
-
-    response = chat('gemma3:12b', messages=messages)
-    category = response['message']['content'].strip()
-    return category
-
-def get_column_name(columnList, requiredColumnDescription):
-    """
-    Given a list of column names and a required column description,
-    returns the best matching column name.
-    """
-
-    concatenatedColumnList = ",".join(columnList)
-
-    messages = [
-        {
-            'role': 'user',
-            'content': f"Among these columns in a credit card/banking statement, which one refers to the one with the '{requiredColumnDescription}'? {concatenatedColumnList}. Just list the name of the column.",
-        },
-    ]
-
-    response = chat('gemma3:12b', messages=messages)
-    category = response['message']['content'].strip()
-    return category
 
 def log_transaction(transaction_date, description, amount, category, status, sub_status=None):
     """
@@ -209,8 +171,6 @@ def write_expenses_to_excel(all_expenses, categorized_expenses, total_expenditur
     # Define styles
     header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
     header_font = Font(bold=True, color="FFFFFF")
-    category_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
-    category_font = Font(bold=True)
     total_fill = PatternFill(start_color="92D050", end_color="92D050", fill_type="solid")
     total_font = Font(bold=True)
     border = Border(
@@ -296,7 +256,6 @@ def write_expenses_to_excel(all_expenses, categorized_expenses, total_expenditur
     # Save the workbook
     wb.save(output_file)
     print(f"Expenses written to {output_file}")
-
 
 import argparse
 if __name__ == "__main__":
