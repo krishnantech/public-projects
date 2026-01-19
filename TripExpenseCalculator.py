@@ -5,9 +5,11 @@ import dateutil.parser as date_parser
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from OllamaGenAIService import OllamaGenAIService;
+from Logger import ConsoleLogger;
 
 # Create a default AI service instance
 _ai_service = OllamaGenAIService("gemma3:12b")
+_logger = ConsoleLogger()
 
 def analyze_trip_expenses(start_date, end_date, location, csv_files, output_file_name):
     """
@@ -30,9 +32,9 @@ def analyze_trip_expenses(start_date, end_date, location, csv_files, output_file
     all_expenses = []
 
     for csv_file in csv_files:
-        print(f"Processing file: {csv_file}")
-        print("-" * 20)
-        print("")
+        _logger.log_info(f"Processing file: {csv_file}")
+        _logger.log_info("-" * 20)
+        _logger.log_info("")
 
         df = pd.read_csv(csv_file)
 
@@ -43,7 +45,7 @@ def analyze_trip_expenses(start_date, end_date, location, csv_files, output_file
         description_column = _ai_service.get_column_name(columnListFromCsv, "name of the merchant")
         amount_column = _ai_service.get_column_name(columnListFromCsv, "transaction amount")
 
-        print(f"Relevant columns from CSV detected. Using columns {date_column} for Date, {description_column} for Description, {amount_column} for Amount")
+        _logger.log_info(f"Relevant columns from CSV detected. Using columns {date_column} for Date, {description_column} for Description, {amount_column} for Amount")
 
         df['date'] = pd.to_datetime(df[date_column])
 
@@ -62,7 +64,7 @@ def analyze_trip_expenses(start_date, end_date, location, csv_files, output_file
                 # Categorize expenses for advance bookings. We will look for specific types here (airfare, accommodation)
                 category = _ai_service.categorize_expense(description, amount)
                 if(category not in ("Airfare", "Accommodation")):
-                    log_transaction(transaction_date_parsed, description, amount, category, status="Ignored", sub_status="Older irrelevant transaction")
+                    _logger.log_transaction(transaction_date_parsed, description, amount, category, status="Ignored", sub_status="Older irrelevant transaction")
                     continue  
 
             elif transaction_date_parsed == (end_date + timedelta(days=1)):
@@ -77,82 +79,20 @@ def analyze_trip_expenses(start_date, end_date, location, csv_files, output_file
     
             # ignore subscriptions, recurring/credit card payments
             if (category not in ["Subscriptions", "Recurring Payments", "Credit Card Payments", "Other Credits"]):
-                log_transaction(transaction_date_parsed, description, amount, category, status="Accepted")
+                _logger.log_transaction(transaction_date_parsed, description, amount, category, status="Accepted")
                 all_expenses.append({'date': transaction_date, 'description': description, 'amount': abs(amount), 'category': category})
             else:
-                log_transaction(transaction_date_parsed, description, amount, category, status="Ignored", sub_status="Subscription/Recurring Payment")
+                _logger.log_transaction(transaction_date_parsed, description, amount, category, status="Ignored", sub_status="Subscription/Recurring Payment")
 
-        print("")
+        _logger.log_info("")
 
     # Print all expenses by category
-    print_expenses_by_category(all_expenses)
+    _logger.print_expenses_by_category(all_expenses)
 
     # Group expenses by category and calculate sums
-    categorized_expenses = {}
-    for expense in all_expenses:
-        category = expense['category']
-        if category not in categorized_expenses:
-            categorized_expenses[category] = 0
-        categorized_expenses[category] += expense['amount']
-
-    # Calculate total trip expenditure
-    total_expenditure = sum(categorized_expenses.values())
+    categorized_expenses, total_expenditure = _logger.calculate_and_print_total_expenses_by_category(all_expenses)
 
     write_expenses_to_excel(all_expenses, categorized_expenses, total_expenditure, f"{output_file_name}.xlsx")
-
-    return categorized_expenses, total_expenditure
-
-def log_transaction(transaction_date, description, amount, category, status, sub_status=None):
-    """
-    Logs a bank account/credit card statement transaction.
-
-    Args:
-        transaction_date (datetime): The date of the transaction.
-        description (str): The description of the transaction.
-        amount (float): The amount of the transaction.
-        category (str): The category of the transaction.
-        status (str): The status of the transaction ('Accepted' or 'Ignored').
-        sub_status (str, optional): A sub-status if the transaction is ignored. Defaults to None.
-    """
-
-    log_entry = f"{transaction_date.strftime('%Y-%m-%d')}|{description}|{amount}|{category}|{status}"
-    if sub_status:
-        log_entry += f"|{sub_status}"
-
-    print(log_entry)
-
-def log_finalized_transaction(transaction_date, description, amount):
-    """
-    Logs a bank account/credit card statement transaction.
-
-    Args:
-        transaction_date (datetime): The date of the transaction.
-        description (str): The description of the transaction.
-        amount (float): The amount of the transaction.
-    """
-
-    log_entry = f"{transaction_date.strftime('%Y-%m-%d')}|{description}|{amount}"
-    print(log_entry)
-
-def print_expenses_by_category(all_expenses):
-    """
-    Prints out all expenses in the all_expenses array, category by category, sorted by date.
-
-    Args:
-        all_expenses (list): A list of expenses, each assigned a category.
-    """
-
-    categories = sorted(list(set([expense['category'] for expense in all_expenses])))
-
-    print("-" * 20)
-    print("-" * 20)
-    for category in categories:
-        expenses_in_category = sorted([expense for expense in all_expenses if expense['category'] == category], key=lambda x: x['date'])
-        print(f"Category: {category}")
-        for expense in expenses_in_category:
-            log_finalized_transaction(date_parser.parse(expense['date']), expense['description'], expense['amount'])
-        print("-" * 20)
-
 
 def write_expenses_to_excel(all_expenses, categorized_expenses, total_expenditure, output_file):
     """
@@ -299,14 +239,10 @@ Examples:
     args = parser.parse_args()
     
     csv_files = [f.strip() for f in args.files.split(',')]
-    categorized_expenses, total_expenditure = analyze_trip_expenses(
+    analyze_trip_expenses(
         args.start_date,
         args.end_date,
         args.location,
         csv_files,
         args.output_file
     )
-    
-    print("Categorized Expenses:")
-    print(categorized_expenses)
-    print("\nTotal Expenditure:", total_expenditure)
