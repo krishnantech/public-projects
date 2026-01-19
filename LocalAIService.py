@@ -1,7 +1,7 @@
 from ollama import chat
 from GenAIService import GenAIService
 
-class OllamaGenAIService(GenAIService):
+class LocalAIService(GenAIService):
     """
     Ollama-based implementation of the GenAIService interface.
     """
