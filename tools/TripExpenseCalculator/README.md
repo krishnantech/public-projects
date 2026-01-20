@@ -7,6 +7,11 @@ This is a tool to help categorize and calculate totals of all expenses undertake
 
 Prototype
 
+## Prerequisites
+The tool requires:
+1) [Ollama](https://ollama.com/), a service that allows running inferencing on various public models (e.g. gpt-oss, DeepSeek-R1, Gemma 3 and other models) locally.
+2) Gemma-3:12b model installed on top of Ollama. Other model choices may be utilized too, with minor changes to the tool. 
+
 ## Usage
 
 ```bash
