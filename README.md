@@ -1,6 +1,6 @@
 # public-projects
 
-My goal is to publish some utilities targeting personal productivity improvements for mundane, personal tasks that take more time than they should :), with a focus on learning as I build. This repo is a collection of small tools and reference implementations exploring ideas in improving personal productivity (for example: areas such as budgeting, taxes, etc.). Each project in this repository focuses on a specific concept or technique and is intended for experimentation and learning.
+My goal is to publish some utilities targeting personal productivity improvements for mundane, personal tasks that take more time than they should :), with a focus on learning as I build. This repo is intended to be a collection of small tools and reference implementations exploring ideas in improving personal productivity (for example: areas such as budgeting, taxes, etc.). Each project in this repository focuses on a specific concept or technique and is intended for experimentation and learning.
 
 ## Overview
 
