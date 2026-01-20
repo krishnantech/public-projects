@@ -19,6 +19,6 @@ All tools reside under the tools/ folder.
 
 | Tool | Description | Status |
 |----|----|----|
-| `TripExpenseCalculator` | a tool to categorize and calculate totals of all expenses undertaken on a trip, including various categories like flights/transport, accommodations, tours, meals, grocery purchases, etc., provided a date range of the trip and bank/credit card statements. | Prototype |
+| `TripExpenseCalculator` | a tool to categorize and calculate totals of all expenses undertaken on a trip, including various categories like flights/transport, accommodations, tours, meals, grocery purchases, etc., Inputs include a date range for the trip and bank/credit card statements for relevant duration of trip expenses. Uses Local AI to prevent confidential data leakage. | Prototype |
 
 New tools may be added over time as ideas evolve.
