@@ -4,3 +4,6 @@ My goal is to publish some utilities targeting personal productivity improvement
 
 ## Budgeting
 **Trip Expense Calculator**, a tool to categorize and calculate totals of all expenses undertaken on a trip, including various categories like flights/transport, accommodations, tours, meals, grocery purchases, etc., provided a date range of the trip and bank/credit card statements.
+
+## Shopping
+**Shopping List Generator**, a tool to analyze pantry images and determine which items are nearing empty, and populate a shopping list with those items.  
