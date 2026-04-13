@@ -1,0 +1,143 @@
+You are building a production-quality, cross-platform CLI tool in C# (.NET 8) for tracking expiration dates of personal identification documents (e.g., passport, driver’s license).
+
+## Goal
+Build a modular, extensible document expiry tracking system that:
+- Stores document metadata locally (no cloud dependencies)
+- Tracks expiration dates
+- Sends notifications when expiry approaches
+- Runs as a CLI tool that can be scheduled daily
+- Works on Windows and Linux (future Raspberry Pi support)
+
+## Constraints
+- Language: C#
+- Framework: .NET 8 (cross-platform)
+- Storage: Local JSON file (no database for now)
+- No external cloud APIs required
+- Keep dependencies minimal
+- Code should be clean, testable, and extensible
+
+---
+
+## Architecture Requirements
+
+Use interface-based design to allow future extensibility.
+
+### Core Interfaces
+
+1. IExpiryProvider
+- Responsibility: Extract or collect expiry date from a document
+- Method:
+  Task<DateTime?> GetExpiryDateAsync(string filePath)
+
+2. INotificationProvider
+- Responsibility: Send notifications
+- Method:
+  Task NotifyAsync(string title, string message)
+
+3. IDocumentRepository
+- Responsibility: Persist documents
+- Methods:
+  Task<List<Document>> GetAllAsync()
+  Task SaveAsync(List<Document> documents)
+
+---
+
+## Core Models
+
+Document:
+- Name (string)
+- FilePath (string)
+- ExpiryDate (DateTime)
+- NotifyDaysBefore (List<int>)
+- (Optional future field: LastNotifiedDates)
+
+---
+
+## Required Implementations (V1)
+
+### Expiry Providers
+- ManualExpiryProvider:
+  - Prompts user for expiry date via CLI
+
+### Notification Providers
+- ConsoleNotificationProvider:
+  - Writes notifications to console
+
+### Repository
+- JsonDocumentRepository:
+  - Stores data in documents.json
+  - Uses System.Text.Json
+  - Handles file not found gracefully
+
+---
+
+## Core Service
+
+Create DocumentService with:
+- Method: CheckExpirationsAsync()
+- Logic:
+  - Load all documents
+  - Compare expiry date with today
+  - If days remaining matches any NotifyDaysBefore threshold → trigger notification
+
+---
+
+## CLI Requirements
+
+Implement a simple CLI with commands:
+
+1. add
+   - Prompts for:
+     - document name
+     - file path
+     - expiry date (via IExpiryProvider)
+   - Saves document
+
+2. check
+   - Runs expiry check logic
+   - Triggers notifications
+
+---
+
+## Design Guidelines
+
+- Follow separation of concerns strictly
+- Use dependency injection (manual wiring is fine)
+- Avoid hardcoding logic inside Program.cs
+- Keep classes small and focused
+- Write clean, readable code with comments where needed
+
+---
+
+## Future Extensibility (Design for this, do NOT fully implement yet)
+
+- OCR-based expiry extraction (e.g., Tesseract)
+- Email notification provider (SMTP)
+- Push notifications
+- File system watcher for auto-detecting new documents
+- SQLite repository option
+
+---
+
+## Deliverables
+
+1. Full working project structure
+2. All required classes and interfaces implemented
+3. CLI entry point (Program.cs)
+4. Example documents.json format
+5. Instructions to build and run:
+   - dotnet build
+   - dotnet run -- add
+   - dotnet run -- check
+
+---
+
+## Important
+
+- Prefer correctness and clarity over cleverness
+- Do NOT over-engineer (keep V1 simple but extensible)
+- Ensure code compiles without modification
+
+---
+
+Now generate the full implementation.

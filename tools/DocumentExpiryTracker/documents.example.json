@@ -1,0 +1,9 @@
+[
+  {
+    "Name": "Passport",
+    "FilePath": "/home/user/documents/passport.pdf",
+    "ExpiryDate": "2030-06-15T00:00:00",
+    "NotifyDaysBefore": [30, 7, 1, 0],
+    "LastNotifiedDates": null
+  }
+]
