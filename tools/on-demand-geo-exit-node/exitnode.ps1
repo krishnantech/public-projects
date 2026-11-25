@@ -54,6 +54,17 @@ function Invoke-Az {
     return $out
 }
 
+function Invoke-Quiet {
+    # Runs a native command, hides its output, returns its exit code.
+    # Windows PowerShell 5.1 turns redirected stderr into a terminating error when
+    # $ErrorActionPreference is 'Stop', so relax it just for this call.
+    param([string]$Exe, [string[]]$Arguments)
+    $old = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { & $Exe @Arguments *> $null } finally { $ErrorActionPreference = $old }
+    return $LASTEXITCODE
+}
+
 function Read-WithDefault([string]$prompt, [string]$default) {
     $v = Read-Host "$prompt [$default]"
     if ([string]::IsNullOrWhiteSpace($v)) { return $default } else { return $v.Trim() }
@@ -78,8 +89,7 @@ function Connect-Azure {
     if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
         throw "Azure CLI not found. Install it: winget install -e --id Microsoft.AzureCLI"
     }
-    & az account show -o none 2>$null
-    if ($LASTEXITCODE -ne 0) {
+    if ((Invoke-Quiet 'az' @('account', 'show', '-o', 'none')) -ne 0) {
         Write-Step "Signing in to Azure (a browser window will open)..."
         Invoke-Az login -o none | Out-Null
     }
@@ -186,8 +196,7 @@ function Invoke-Up {
 
     $deadline = (Get-Date).AddMinutes(8); $online = $false
     while ((Get-Date) -lt $deadline) {
-        & $ts ping -c 1 --timeout 3s $tsHost *> $null
-        if ($LASTEXITCODE -eq 0) { $online = $true; break }
+        if ((Invoke-Quiet $ts @('ping', '-c', '1', '--timeout', '3s', $tsHost)) -eq 0) { $online = $true; break }
         Start-Sleep -Seconds 10
         Write-Host "." -NoNewline
     }
@@ -199,13 +208,14 @@ function Invoke-Up {
     Write-Host "click '...' on $tsHost -> Edit route settings -> tick 'Use as exit node'." -ForegroundColor Gray
     Read-Host "Press Enter to route this PC through $Region (Ctrl+C to skip)" | Out-Null
 
+    $rc = 1
     for ($try = 1; $try -le 6; $try++) {
-        & $ts set "--exit-node=$tsHost" --exit-node-allow-lan-access=true
-        if ($LASTEXITCODE -eq 0) { break }
+        $rc = Invoke-Quiet $ts @('set', "--exit-node=$tsHost", '--exit-node-allow-lan-access=true')
+        if ($rc -eq 0) { break }
         Write-Warn "Exit node not usable yet (approved?). Retrying in 10s..."
         Start-Sleep -Seconds 10
     }
-    if ($LASTEXITCODE -ne 0) { Write-Warn "Couldn't set the exit node. Approve it in $AdminConsole and pick it from the tray icon."; return }
+    if ($rc -ne 0) { Write-Warn "Couldn't set the exit node. Approve it in $AdminConsole and pick it from the tray icon."; return }
 
     Start-Sleep -Seconds 3
     try {
@@ -220,7 +230,7 @@ function Invoke-Up {
 
 function Invoke-Down {
     $ts = Get-TailscaleCli
-    if ($ts) { Write-Step "Switching this PC back to its normal connection..."; & $ts set --exit-node= 2>$null }
+    if ($ts) { Write-Step "Switching this PC back to its normal connection..."; Invoke-Quiet $ts @('set', '--exit-node=') | Out-Null }
     if (-not $All) { Require-Region }
     Connect-Azure
     $groups = if ($All) { Get-ExitNodeGroups } else { @(Get-RgName $Region) }
@@ -250,8 +260,7 @@ function Invoke-Status {
         $sf = Get-StateFile $rg
         if ($ts -and (Test-Path $sf)) {
             $tsHost = (Get-Content $sf).Trim()
-            & $ts ping -c 1 --timeout 3s $tsHost *> $null
-            $state = if ($LASTEXITCODE -eq 0) { 'reachable' } else { 'not reachable' }
+            $state = if ((Invoke-Quiet $ts @('ping', '-c', '1', '--timeout', '3s', $tsHost)) -eq 0) { 'reachable' } else { 'not reachable' }
             Write-Host "Tailscale node $tsHost is $state."
         }
     }
