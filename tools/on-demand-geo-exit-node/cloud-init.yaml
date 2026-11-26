@@ -1,0 +1,109 @@
+#cloud-config
+# on-demand-geo-exit-node - rendered by exitnode.ps1: the __PLACEHOLDERS__ are replaced before the VM is created.
+# Sets up Tailscale as an exit node, plus a cron job that deletes this VM's whole
+# resource group when it has been idle (or alive) too long.
+
+write_files:
+  - path: /etc/exitnode.conf
+    permissions: '0600'
+    content: |
+      TS_AUTHKEY='__TS_AUTHKEY__'
+      TS_HOST='__TS_HOST__'
+      IDLE_MIN=__IDLE_MIN__
+      MAX_HOURS=__MAX_HOURS__
+      ACTIVE_KB=__ACTIVE_KB__
+
+  - path: /etc/sysctl.d/99-tailscale.conf
+    content: |
+      net.ipv4.ip_forward = 1
+      net.ipv6.conf.all.forwarding = 1
+
+  - path: /usr/local/sbin/exitnode-setup
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # One-time setup, run by cloud-init on first boot.
+      set -euo pipefail
+      . /etc/exitnode.conf
+      sysctl --system >/dev/null
+
+      # Install Tailscale (retry: apt may be locked by first-boot updates).
+      for i in $(seq 1 10); do
+        if curl -fsSL https://tailscale.com/install.sh | sh; then break; fi
+        echo "tailscale install attempt $i failed, retrying..." >&2
+        sleep 15
+      done
+      command -v tailscale >/dev/null
+
+      # Recommended tuning for exit nodes (harmless if unsupported).
+      NETDEV=$(ip -o route get 8.8.8.8 | awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1)}')
+      if command -v ethtool >/dev/null && [ -n "$NETDEV" ]; then
+        ethtool -K "$NETDEV" rx-udp-gro-forwarding on rx-gro-list off || true
+      fi
+
+      tailscale up --authkey="$TS_AUTHKEY" --hostname="$TS_HOST" --advertise-exit-node
+
+      # The key is single-use and now consumed; remove it anyway.
+      sed -i '/^TS_AUTHKEY=/d' /etc/exitnode.conf
+      rm -f /var/lib/cloud/instance/user-data.txt* || true
+
+      # Start the idle / max-lifetime watchdog (every 5 minutes).
+      echo '*/5 * * * * root /usr/local/sbin/exitnode-idle-check' > /etc/cron.d/exitnode-idle
+      echo "exitnode-setup complete"
+
+  - path: /usr/local/sbin/exitnode-idle-check
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # Deletes this VM's resource group when idle for IDLE_MIN minutes or up for MAX_HOURS.
+      # "Active" = more than ACTIVE_KB of traffic on tailscale0 since the last check.
+      set -u
+      . /etc/exitnode.conf
+      STATE=/var/lib/exitnode-idle
+      mkdir -p "$STATE"
+      now=$(date +%s)
+
+      rx=$(cat /sys/class/net/tailscale0/statistics/rx_bytes 2>/dev/null || echo 0)
+      tx=$(cat /sys/class/net/tailscale0/statistics/tx_bytes 2>/dev/null || echo 0)
+      bytes=$((rx + tx))
+
+      [ -f "$STATE/last_bytes" ]  || echo "$bytes" > "$STATE/last_bytes"
+      [ -f "$STATE/last_active" ] || echo "$now"   > "$STATE/last_active"
+      last_bytes=$(cat "$STATE/last_bytes")
+      last_active=$(cat "$STATE/last_active")
+
+      if [ $((bytes - last_bytes)) -gt $((ACTIVE_KB * 1024)) ]; then
+        last_active=$now
+        echo "$now" > "$STATE/last_active"
+      fi
+      echo "$bytes" > "$STATE/last_bytes"
+
+      uptime_s=$(cut -d. -f1 /proc/uptime)
+      reason=""
+      [ $((now - last_active)) -gt $((IDLE_MIN * 60)) ] && reason="idle for ${IDLE_MIN}+ min"
+      [ "$uptime_s" -gt $((MAX_HOURS * 3600)) ] && reason="max lifetime of ${MAX_HOURS}h reached"
+      [ -z "$reason" ] && exit 0
+
+      [ -f "$STATE/deleting" ] && exit 0
+      logger -t exitnode-idle "Deleting resource group: $reason"
+
+      IMDS=http://169.254.169.254/metadata
+      meta=$(curl -s -H Metadata:true "$IMDS/instance/compute?api-version=2021-02-01")
+      sub=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["subscriptionId"])' <<<"$meta")
+      rg=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["resourceGroupName"])' <<<"$meta")
+      token=$(curl -s -H Metadata:true \
+        "$IMDS/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/" \
+        | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+
+      code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE \
+        -H "Authorization: Bearer $token" \
+        "https://management.azure.com/subscriptions/$sub/resourcegroups/$rg?api-version=2021-04-01")
+      logger -t exitnode-idle "Resource group delete request returned HTTP $code"
+
+      if [ "$code" = "202" ] || [ "$code" = "200" ]; then
+        touch "$STATE/deleting"
+        tailscale logout || true   # drop out of the tailnet right away
+      fi
+
+runcmd:
+  - [ /usr/local/sbin/exitnode-setup ]

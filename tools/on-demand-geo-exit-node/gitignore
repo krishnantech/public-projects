@@ -1,0 +1,7 @@
+# Never commit rendered cloud-init (contains an auth key) or local state
+*-cloud-init-*.yaml
+rendered*.yaml
+.exitnode/
+*.key
+*.pem
+.env
